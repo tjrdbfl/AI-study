@@ -2,14 +2,14 @@
 import tensorflow as tf
 
 # OR 데이터 구축
-x=tf.constant([[0,0,0,0],[0,0,1,0],[1,0,0,0],[1,0,1,0]], dtype=tf.float32)
+x=tf.constant([[0.0,0.0],[0.0,1.0],[1.0,0.0],[1.0,1.0]], dtype=tf.float32)
 y=tf.constant([[-1],[1],[1],[1]], dtype=tf.float32)
 
 # 가중치 초기화
 # w 의 모양 : [2,1]
 # -0.5~0.5 의 난수 생성
 # bias를 크기가 1인 배열인 0으로 초기화
-w=tf.Variable(tf.random.uniform([4,1],-0.5,0.5))
+w=tf.Variable(tf.random.uniform([2,1],-0.5,0.5))
 b=tf.Variable(tf.zeros([1]))
 
 # 옵티마이저

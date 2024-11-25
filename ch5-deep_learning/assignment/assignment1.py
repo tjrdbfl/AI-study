@@ -9,9 +9,10 @@ import tensorflow as tf
 import tensorflow.keras.datasets as ds
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout
-from tensorflow.keras.optimizers import SGD, Adam, Adagrad, RMSprop
+from tensorflow.keras.optimizers import Adam,SGD,Adagrad,RMSprop
 from sklearn.model_selection import KFold
 from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.regularizers import l2
 # -------------------------------------------------
 
 # 1. 입력: MNIST와 CIFAR-10이 통합된 데이터셋 만들기
@@ -61,8 +62,8 @@ x_test=x_test.astype(np.float32)/255.0
 y_train = np.concatenate([y_train_mnist, y_train_cifar], axis=0)
 y_test = np.concatenate([y_test_mnist, y_test_cifar], axis=0)
 
-print(f"통합된 x_train 모양: {x_train.shape}")
-print(f"통합된 y_train 모양: {y_train.shape}")
+print(f"integrated x_train shape: {x_train.shape}")
+print(f"integrated y_train shape: {y_train.shape}")
 
 # -------------------------------------------------
 
@@ -84,34 +85,36 @@ k=5
 # 2-4. 모델을 설계하는 함수
 def build_model():
     model=Sequential()
-    model.add(Dense(units=n_hidden1,activation='relu',input_shape=(n_input,)))
-    model.add(Dropout(0.5))  # Dropout으로 과적합 방지
-    model.add(Dense(units=n_hidden2,activation='relu'))
-    model.add(Dropout(0.5))  # Dropout으로 과적합 방지
-    model.add(Dense(units=n_hidden3,activation='relu'))
-    model.add(Dropout(0.5))  # Dropout으로 과적합 방지
-    model.add(Dense(units=n_hidden4,activation='relu'))
-    model.add(Dropout(0.5))  # Dropout으로 과적합 방지
+    model.add(Dense(units=n_hidden1,activation='relu',input_shape=(n_input,), kernel_regularizer=l2(0.001)))  # L2 정규화 추가
+    model.add(Dropout(0.6))  # 드롭아웃으로 과적합 방지
+    model.add(Dense(units=n_hidden2,activation='relu', kernel_regularizer=l2(0.001)))
+    model.add(Dropout(0.6))
+    model.add(Dense(units=n_hidden3,activation='relu', kernel_regularizer=l2(0.001)))
+    model.add(Dropout(0.6))
+    model.add(Dense(units=n_hidden4,activation='relu', kernel_regularizer=l2(0.001)))
+    model.add(Dropout(0.6))
     model.add(Dense(units=n_output,activation='sigmoid'))
     return model
-
-# 데이터를 1차원 벡터로 변환 (flattening)
-x_train_flat = x_train.reshape(x_train.shape[0], -1)
-x_test_flat = x_test.reshape(x_test.shape[0], -1)
 
 # -------------------------------------------------
 
 # 3. 교차 검증 함수 (KFold)
 
-def cross_validation(opt):
+# 데이터를 1차원 벡터로 변환 (flattening)
+x_train_flat = x_train.reshape(x_train.shape[0], -1)
+x_test_flat = x_test.reshape(x_test.shape[0], -1)
+
+
+def cross_validation(opt_class, learning_rate):
     accuracy=[]
-    early_stopping = EarlyStopping(monitor='val_loss', patience=5)  # 조기 종료 설정
-    
+    early_stopping = EarlyStopping(monitor='val_loss', patience=3)  # patience 감소
+   
     for train_index, val_index in KFold(k).split(x_train_flat):
         x_train_fold,x_test_fold=x_train_flat[train_index],x_train_flat[val_index]
         y_train_fold,y_test_fold=y_train[train_index],y_train[val_index]
         
         dmlp=build_model()
+        opt = opt_class(learning_rate=learning_rate)  # 옵티마이저 인스턴스 매번 생성
         dmlp.compile(loss='binary_crossentropy',optimizer=opt,metrics=['accuracy'])
         dmlp.fit(x_train_fold,y_train_fold,batch_size=batch_siz,epochs=n_epoch,validation_data=(x_test_fold,y_test_fold),callbacks=[early_stopping],verbose=2)
         
@@ -121,25 +124,23 @@ def cross_validation(opt):
 # -------------------------------------------------
 
 # 4. 옵티마이저별 성능 평가
-# optimizers=[SGD(learning_rate=0.001),Adam(learning_rate=0.0001),Adagrad(learning_rate=0.0001),RMSprop(learning_rate=0.0001)]
-# optimizer_names=['SGD','Adam','Adagrad','RMSprop']
-optimizers=[Adam(learning_rate=0.0001)]
-optimizer_names=['Adam']
+optimizers=[SGD, Adam, Adagrad, RMSprop]
+learning_rates=[0.001, 0.0001, 0.0001, 0.0001]
+optimizer_names=['SGD','Adam','Adagrad','RMSprop']
 
 # 교차 검증 실행
-optimizer_accuracies={}
-for opt,name  in zip(optimizers,optimizer_names):
-    accuracy=cross_validation(opt)
-    optimizer_accuracies[name]=accuracy
-    print(f'{name} 옵티마이저별 분류 성능(accuracy) 평균 : {np.mean(accuracy):.4f}')
-    
-# -------------------------------------------------
+optimizer_accuracies = {}
+for opt_class, lr, name in zip(optimizers, learning_rates, optimizer_names):
+    accuracy = cross_validation(opt_class, lr)
+    optimizer_accuracies[name] = accuracy
+    print(f'{name} optimizer classification performance (accuracy) average : {np.mean(accuracy):.4f}')
+
 
 # 5. 결과 시각화
 plt.figure(figsize=(10,6))
 for name,acc in optimizer_accuracies.items():
     plt.plot(acc,label=f'{name} (mean={np.mean(acc):.4f})')
-    
+
 plt.title('Optimizer Comparison : Accuracy per Fold')
 plt.xlabel('Fold')
 plt.ylabel('Accuracy')
